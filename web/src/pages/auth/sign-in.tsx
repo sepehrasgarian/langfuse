@@ -548,6 +548,92 @@ export default function SignIn({
   const [credentialsFormError, setCredentialsFormError] = useState<
     string | null
   >(errorMessage);
+
+  // ===== JWT SSO AUTO-LOGIN =====
+  const [isJwtAutoLogin, setIsJwtAutoLogin] = useState(false);
+  const [jwtLoginError, setJwtLoginError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const jwtToken = router.query.jwt_token;
+
+    // Check if JWT token exists in URL and we're not already processing
+    if (
+      jwtToken &&
+      typeof jwtToken === "string" &&
+      !isJwtAutoLogin &&
+      authProviders.credentials
+    ) {
+      console.log("JWT SSO: Token detected in URL, starting auto-login");
+
+      setIsJwtAutoLogin(true);
+      setJwtLoginError(null);
+
+      // Attempt to sign in with JWT token
+      signIn("credentials", {
+        email: "",
+        password: "",
+        jwt_token: jwtToken,
+        callbackUrl: (router.query.callbackUrl as string) || "/",
+        redirect: false,
+      })
+        .then((result) => {
+          if (result?.error) {
+            console.error("JWT SSO: Auto-login failed:", result.error);
+            setJwtLoginError(
+              "Authentication failed. " + result.error || "Please try again.",
+            );
+            setIsJwtAutoLogin(false);
+
+            // Clean up URL (remove jwt_token parameter)
+            const cleanQuery = { ...router.query };
+            delete cleanQuery.jwt_token;
+            void router.replace(
+              {
+                pathname: router.pathname,
+                query: cleanQuery,
+              },
+              undefined,
+              { shallow: true },
+            );
+          } else if (result?.ok) {
+            console.log("JWT SSO: Auto-login successful, redirecting...");
+            // Redirect will happen automatically
+            window.location.href = result.url || "/";
+          }
+        })
+        .catch((error) => {
+          console.error("JWT SSO: Auto-login exception:", error);
+          setJwtLoginError("An unexpected error occurred during authentication.");
+          setIsJwtAutoLogin(false);
+
+          // Clean up URL
+          const cleanQuery = { ...router.query };
+          delete cleanQuery.jwt_token;
+          void router.replace(
+            {
+              pathname: router.pathname,
+              query: cleanQuery,
+            },
+            undefined,
+            { shallow: true },
+          );
+        });
+    }
+  }, [
+    router.query.jwt_token,
+    isJwtAutoLogin,
+    authProviders.credentials,
+    router,
+  ]);
+
+  // Update credentials form error if JWT login fails
+  useEffect(() => {
+    if (jwtLoginError) {
+      setCredentialsFormError(jwtLoginError);
+    }
+  }, [jwtLoginError]);
+  // ===== END JWT SSO AUTO-LOGIN =====
+
   // Two-step login flow: ask for email first, detect SSO, then either redirect to SSO or reveal password field.
   // Skip this flow when no SSO is configured - show password field immediately
   const [showPasswordStep, setShowPasswordStep] = useState<boolean>(
@@ -695,6 +781,40 @@ export default function SignIn({
     } finally {
       setContinueLoading(false);
     }
+  }
+
+  // Show loading screen during JWT auto-login
+  if (isJwtAutoLogin) {
+    return (
+      <>
+        <Head>
+          <title>Sign in | Langfuse</title>
+        </Head>
+        <div className="flex flex-1 flex-col py-6 sm:min-h-full sm:justify-center sm:px-6 sm:py-12 lg:px-8">
+          <div className="sm:mx-auto sm:w-full sm:max-w-md">
+            <LangfuseIcon className="mx-auto" />
+            <h2 className="mt-4 text-center text-2xl font-bold leading-9 tracking-tight text-primary">
+              Signing you in...
+            </h2>
+          </div>
+
+          <div className="mt-14 bg-background px-6 py-10 shadow sm:mx-auto sm:w-full sm:max-w-[480px] sm:rounded-lg sm:px-10">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              <p className="text-center text-sm text-muted-foreground">
+                Authenticating with your company account...
+              </p>
+              <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
+                <div
+                  className="bg-primary h-2 rounded-full animate-pulse"
+                  style={{ width: "70%" }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
   }
 
   return (

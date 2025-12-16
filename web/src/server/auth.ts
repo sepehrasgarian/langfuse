@@ -92,9 +92,161 @@ const staticProviders: Provider[] = [
         placeholder: "jsmith@example.com",
       },
       password: { label: "Password", type: "password" },
+      jwt_token: { label: "JWT Token", type: "text" }, // JWT SSO support
     },
     async authorize(credentials, _req) {
       if (!credentials) throw new Error("No credentials");
+
+      // ===== JWT SSO AUTHENTICATION =====
+      // Check if JWT token is provided and JWT SSO is enabled
+      if (credentials.jwt_token && env.AUTH_JWT_SSO_ENABLED === "true") {
+        try {
+          logger.info("JWT SSO: Attempting authentication with JWT token");
+
+          let userData: { id: string; email: string; name: string } | null = null;
+
+          // Option 1: Verify JWT with external API
+          if (env.AUTH_JWT_VERIFY_API_URL) {
+            logger.info("JWT SSO: Verifying token with external API", {
+              apiUrl: env.AUTH_JWT_VERIFY_API_URL,
+            });
+
+            const response = await fetch(env.AUTH_JWT_VERIFY_API_URL, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                token: credentials.jwt_token,
+              }),
+            });
+
+            if (!response.ok) {
+              logger.warn("JWT SSO: Token verification failed", {
+                status: response.status,
+              });
+              throw new Error("Invalid or expired JWT token");
+            }
+
+            userData = await response.json();
+            logger.info("JWT SSO: Token verified successfully", {
+              email: userData?.email,
+            });
+          }
+          // Option 2: Verify JWT locally with secret
+          else if (env.AUTH_JWT_SECRET) {
+            logger.info("JWT SSO: Verifying token locally with JWT_SECRET");
+
+            const jwt = await import("jsonwebtoken");
+            const decoded = jwt.verify(
+              credentials.jwt_token,
+              env.AUTH_JWT_SECRET,
+            ) as {
+              userId?: string;
+              id?: string;
+              email: string;
+              name: string;
+            };
+
+            userData = {
+              id: decoded.userId || decoded.id || decoded.email,
+              email: decoded.email,
+              name: decoded.name,
+            };
+
+            logger.info("JWT SSO: Token verified locally", {
+              email: userData.email,
+            });
+          } else {
+            logger.error(
+              "JWT SSO: Enabled but no verification method configured",
+            );
+            throw new Error(
+              "JWT SSO is enabled but not properly configured. Please set AUTH_JWT_VERIFY_API_URL or AUTH_JWT_SECRET.",
+            );
+          }
+
+          if (!userData || !userData.email) {
+            throw new Error("Invalid user data received from JWT verification");
+          }
+
+          // Find or create user in Langfuse database
+          let dbUser = await prisma.user.findUnique({
+            where: {
+              email: userData.email.toLowerCase(),
+            },
+          });
+
+          if (!dbUser) {
+            // Check if signup is disabled
+            if (
+              env.NEXT_PUBLIC_SIGN_UP_DISABLED === "true" ||
+              env.AUTH_DISABLE_SIGNUP === "true"
+            ) {
+              logger.warn("JWT SSO: User not found and signup is disabled", {
+                email: userData.email,
+              });
+              throw new Error(
+                "Your account does not exist. Please contact your administrator.",
+              );
+            }
+
+            logger.info("JWT SSO: Creating new user", {
+              email: userData.email,
+            });
+
+            // Create new user
+            dbUser = await prisma.user.create({
+              data: {
+                email: userData.email.toLowerCase(),
+                name: userData.name || userData.email,
+                emailVerified: new Date(), // Auto-verify JWT users
+              },
+            });
+
+            // Create default project memberships
+            await createProjectMembershipsOnSignup(dbUser);
+
+            logger.info("JWT SSO: New user created successfully", {
+              userId: dbUser.id,
+              email: dbUser.email,
+            });
+          } else {
+            logger.info("JWT SSO: Existing user found", {
+              userId: dbUser.id,
+              email: dbUser.email,
+            });
+          }
+
+          // Return user object
+          const userObj: User = {
+            id: dbUser.id,
+            name: dbUser.name,
+            email: dbUser.email,
+            image: dbUser.image,
+            emailVerified: dbUser.emailVerified?.toISOString(),
+            featureFlags: parseFlags(dbUser.featureFlags),
+            canCreateOrganizations: canCreateOrganizations(dbUser.email),
+            organizations: [],
+          };
+
+          logger.info("JWT SSO: Authentication successful", {
+            userId: userObj.id,
+          });
+
+          return userObj;
+        } catch (error) {
+          logger.error("JWT SSO: Authentication failed", error);
+          throw new Error(
+            error instanceof Error
+              ? error.message
+              : "JWT authentication failed",
+          );
+        }
+      }
+      // ===== END JWT SSO AUTHENTICATION =====
+
+      // Regular password authentication
       if (env.AUTH_DISABLE_USERNAME_PASSWORD === "true")
         throw new Error(
           "Sign in with email and password is disabled for this instance. Please use SSO.",
