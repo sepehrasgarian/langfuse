@@ -169,6 +169,9 @@ export const env = createEnv({
     AUTH_JWT_SSO_ENABLED: z.enum(["true", "false"]).optional().default("false"),
     AUTH_JWT_VERIFY_API_URL: z.string().url().optional(),
     AUTH_JWT_SECRET: z.string().optional(),
+    AUTH_JWT_TEST_TOKEN: z.string().optional(), // Hardcoded test token (for testing only)
+    AUTH_JWT_TEST_USER_EMAIL: z.string().email().optional(), // Email for test token user
+    AUTH_JWT_TEST_USER_NAME: z.string().optional(), // Name for test token user
     AUTH_WORKOS_CLIENT_ID: z.string().optional(),
     AUTH_WORKOS_CLIENT_SECRET: z.string().optional(),
     AUTH_WORKOS_ALLOW_ACCOUNT_LINKING: z.enum(["true", "false"]).optional(),
@@ -524,6 +527,9 @@ export const env = createEnv({
     AUTH_JWT_SSO_ENABLED: process.env.AUTH_JWT_SSO_ENABLED,
     AUTH_JWT_VERIFY_API_URL: process.env.AUTH_JWT_VERIFY_API_URL,
     AUTH_JWT_SECRET: process.env.AUTH_JWT_SECRET,
+    AUTH_JWT_TEST_TOKEN: process.env.AUTH_JWT_TEST_TOKEN,
+    AUTH_JWT_TEST_USER_EMAIL: process.env.AUTH_JWT_TEST_USER_EMAIL,
+    AUTH_JWT_TEST_USER_NAME: process.env.AUTH_JWT_TEST_USER_NAME,
     AUTH_WORKOS_CLIENT_ID: process.env.AUTH_WORKOS_CLIENT_ID,
     AUTH_WORKOS_CLIENT_SECRET: process.env.AUTH_WORKOS_CLIENT_SECRET,
     AUTH_WORKOS_ALLOW_ACCOUNT_LINKING:

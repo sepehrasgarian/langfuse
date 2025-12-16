@@ -105,65 +105,17 @@ const staticProviders: Provider[] = [
 
           let userData: { id: string; email: string; name: string } | null = null;
 
-          // Option 1: Verify JWT with external API
-          if (env.AUTH_JWT_VERIFY_API_URL) {
-            logger.info("JWT SSO: Verifying token with external API", {
-              apiUrl: env.AUTH_JWT_VERIFY_API_URL,
-            });
-
-            const response = await fetch(env.AUTH_JWT_VERIFY_API_URL, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                token: credentials.jwt_token,
-              }),
-            });
-
-            if (!response.ok) {
-              logger.warn("JWT SSO: Token verification failed", {
-                status: response.status,
-              });
-              throw new Error("Invalid or expired JWT token");
-            }
-
-            userData = await response.json();
-            logger.info("JWT SSO: Token verified successfully", {
-              email: userData?.email,
-            });
-          }
-          // Option 2: Verify JWT locally with secret
-          else if (env.AUTH_JWT_SECRET) {
-            logger.info("JWT SSO: Verifying token locally with JWT_SECRET");
-
-            const jwt = await import("jsonwebtoken");
-            const decoded = jwt.verify(
-              credentials.jwt_token,
-              env.AUTH_JWT_SECRET,
-            ) as {
-              userId?: string;
-              id?: string;
-              email: string;
-              name: string;
-            };
-
+          // Hardcoded test token - simple authentication
+          if (env.AUTH_JWT_TEST_TOKEN && credentials.jwt_token === env.AUTH_JWT_TEST_TOKEN) {
+            logger.info("JWT SSO: Using hardcoded test token");
             userData = {
-              id: decoded.userId || decoded.id || decoded.email,
-              email: decoded.email,
-              name: decoded.name,
+              id: "test-user",
+              email: env.AUTH_JWT_TEST_USER_EMAIL || "test@example.com",
+              name: env.AUTH_JWT_TEST_USER_NAME || "Test User",
             };
-
-            logger.info("JWT SSO: Token verified locally", {
-              email: userData.email,
-            });
           } else {
-            logger.error(
-              "JWT SSO: Enabled but no verification method configured",
-            );
-            throw new Error(
-              "JWT SSO is enabled but not properly configured. Please set AUTH_JWT_VERIFY_API_URL or AUTH_JWT_SECRET.",
-            );
+            logger.warn("JWT SSO: Invalid token provided");
+            throw new Error("Invalid token");
           }
 
           if (!userData || !userData.email) {
