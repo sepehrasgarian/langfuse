@@ -554,19 +554,45 @@ export default function SignIn({
   const [jwtLoginError, setJwtLoginError] = useState<string | null>(null);
 
   useEffect(() => {
-    const jwtToken = router.query.jwt_token;
+    // Helper function to get cookie value
+    const getCookie = (name: string): string | null => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+      return null;
+    };
 
-    // Check if JWT token exists in URL and we're not already processing
+    console.log('🔍 JWT SSO: Checking for authentication token in cookies...');
+    console.log('🍪 All cookies:', document.cookie || '(no cookies)');
+
+    // Check for JWT token ONLY in Cookie
+    const jwtToken = getCookie('langfuse_jwt_token') || undefined;
+
+    if (jwtToken) {
+      console.log('✅ JWT Token found in Cookie:', jwtToken.substring(0, 30) + '...');
+    } else {
+      console.log('❌ No JWT token found in cookies');
+    }
+
+    // Check if JWT token exists and we're not already processing
     if (
       jwtToken &&
       typeof jwtToken === "string" &&
       !isJwtAutoLogin &&
       authProviders.credentials
     ) {
-      console.log("JWT SSO: Token detected in URL, starting auto-login");
+      console.log('🎯 JWT SSO: Token detected in Cookie, starting auto-login');
+      console.log('🔐 Starting authentication process...');
 
       setIsJwtAutoLogin(true);
       setJwtLoginError(null);
+
+      // Helper function to clear JWT token cookie
+      const clearJwtToken = () => {
+        // Clear cookie
+        document.cookie = 'langfuse_jwt_token=; path=/; max-age=0; SameSite=Lax';
+        console.log('🍪 JWT token cookie cleared');
+      };
 
       // Attempt to sign in with JWT token
       signIn("credentials", {
@@ -583,20 +609,10 @@ export default function SignIn({
               "Authentication failed. " + result.error || "Please try again.",
             );
             setIsJwtAutoLogin(false);
-
-            // Clean up URL (remove jwt_token parameter)
-            const cleanQuery = { ...router.query };
-            delete cleanQuery.jwt_token;
-            void router.replace(
-              {
-                pathname: router.pathname,
-                query: cleanQuery,
-              },
-              undefined,
-              { shallow: true },
-            );
+            clearJwtToken();
           } else if (result?.ok) {
             console.log("JWT SSO: Auto-login successful, redirecting...");
+            clearJwtToken();
             // Redirect will happen automatically
             window.location.href = result.url || "/";
           }
@@ -605,22 +621,10 @@ export default function SignIn({
           console.error("JWT SSO: Auto-login exception:", error);
           setJwtLoginError("An unexpected error occurred during authentication.");
           setIsJwtAutoLogin(false);
-
-          // Clean up URL
-          const cleanQuery = { ...router.query };
-          delete cleanQuery.jwt_token;
-          void router.replace(
-            {
-              pathname: router.pathname,
-              query: cleanQuery,
-            },
-            undefined,
-            { shallow: true },
-          );
+          clearJwtToken();
         });
     }
   }, [
-    router.query.jwt_token,
     isJwtAutoLogin,
     authProviders.credentials,
     router,

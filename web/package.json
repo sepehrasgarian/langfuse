@@ -122,6 +122,7 @@
     "ioredis": "^5.8.2",
     "ip-address": "^9.0.5",
     "json-schema-faker": "^0.5.9",
+    "jsonwebtoken": "^9.0.3",
     "kysely": "^0.27.4",
     "langchain": "^0.3.30",
     "langfuse": "3.38.4",

@@ -105,17 +105,33 @@ const staticProviders: Provider[] = [
 
           let userData: { id: string; email: string; name: string } | null = null;
 
-          // Hardcoded test token - simple authentication
-          if (env.AUTH_JWT_TEST_TOKEN && credentials.jwt_token === env.AUTH_JWT_TEST_TOKEN) {
-            logger.info("JWT SSO: Using hardcoded test token");
-            userData = {
-              id: "test-user",
-              email: env.AUTH_JWT_TEST_USER_EMAIL || "test@example.com",
-              name: env.AUTH_JWT_TEST_USER_NAME || "Test User",
-            };
+          // Verify JWT token with local secret
+          if (env.AUTH_JWT_SECRET) {
+            logger.info("JWT SSO: Verifying JWT token with local secret");
+            const jwt = require('jsonwebtoken');
+            
+            try {
+              const decoded = jwt.verify(credentials.jwt_token, env.AUTH_JWT_SECRET) as {
+                id?: string;
+                userId?: string;
+                email: string;
+                name?: string;
+              };
+
+              logger.info("JWT SSO: Token verified successfully", { email: decoded.email });
+
+              userData = {
+                id: decoded.id || decoded.userId || decoded.email,
+                email: decoded.email,
+                name: decoded.name || decoded.email,
+              };
+            } catch (jwtError) {
+              logger.error("JWT SSO: Token verification failed", jwtError);
+              throw new Error("Invalid or expired token");
+            }
           } else {
-            logger.warn("JWT SSO: Invalid token provided");
-            throw new Error("Invalid token");
+            logger.warn("JWT SSO: No verification method configured (AUTH_JWT_SECRET not set)");
+            throw new Error("JWT SSO not properly configured - missing AUTH_JWT_SECRET");
           }
 
           if (!userData || !userData.email) {
